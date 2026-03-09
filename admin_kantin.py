@@ -1,3 +1,4 @@
+
 import streamlit as st
 from supabase import create_client
 import time
@@ -7,35 +8,87 @@ from fpdf import FPDF
 from datetime import datetime
 
 # ==============================================================================
-# 1. KONFIGURASI & KONEKSI AMAN (UPDATED)
+# 1. KONFIGURASI & KONEKSI
 # ==============================================================================
-st.set_page_config(page_title="Panel Admin Kantin", layout="wide", page_icon="👮")
+st.set_page_config(
+    page_title="Panel Admin Kantin", 
+    layout="wide", 
+    page_icon="👮",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
+)
 
-# --- CSS UNTUK MENYEMBUNYIKAN HEADER GITHUB DAN MENU ---
-sembunyikan_elemen = """
+# --- CSS MODERN MENU & HIDE HEADER ---
+sembunyikan_menu = """
 <style>
-#MainMenu {visibility: hidden;}
-header {visibility: hidden;}
-footer {visibility: hidden;}
-.block-container {padding-top: 1rem;}
+/* --- 1. HILANGKAN HEADER & FOOTER BAWAAN --- */
+header {visibility: hidden !important; display: none !important;}
+footer {visibility: hidden !important;}
+#manage-app-button {display: none !important;}
+
+/* --- 2. SULAP RADIO BUTTON JADI MENU MODERN --- */
+div[role="radiogroup"] label > div:first-child {
+    display: none !important;
+}
+
+div[role="radiogroup"] label {
+    background-color: #f7f9fc;
+    border: 1px solid #dcdede;
+    padding: 10px 20px !important;
+    border-radius: 50px !important;
+    margin: 5px;
+    transition: all 0.3s ease-in-out;
+    cursor: pointer;
+}
+
+div[role="radiogroup"] label p {
+    margin: 0 !important;
+    font-weight: 600 !important;
+    color: #555 !important;
+    font-size: 14px;
+}
+
+div[role="radiogroup"] label:hover {
+    background-color: #e3f2fd;
+    border-color: #00AAFF;
+    transform: translateY(-3px);
+}
+
+div[role="radiogroup"] label:has(input[aria-checked="true"]) {
+    background-color: #00AAFF !important;
+    border-color: #00AAFF !important;
+    box-shadow: 0 4px 10px rgba(0, 170, 255, 0.4) !important;
+}
+
+div[role="radiogroup"] label:has(input[aria-checked="true"]) p {
+    color: #ffffff !important;
+}
+
+div[role="radiogroup"] {
+    justify-content: center;
+    flex-wrap: wrap; 
+    gap: 8px;
+}
 </style>
 """
-st.markdown(sembunyikan_elemen, unsafe_allow_html=True)
+st.markdown(sembunyikan_menu, unsafe_allow_html=True)
 
 if 'is_logged_in' not in st.session_state:
     st.session_state['is_logged_in'] = False
 
-# --- KONEKSI SUPABASE VIA SECRETS ---
 try:
     URL = st.secrets["SUPABASE_URL"]
     KEY = st.secrets["SUPABASE_KEY"]
     supabase = create_client(URL, KEY)
 except:
-    st.error("⚠️ Secret Supabase belum disetting! Pastikan URL dan KEY ada di Streamlit Secrets.")
+    st.error("⚠️ Secret Supabase belum disetting!")
     st.stop()
 
 # ==============================================================================
-# 2. SISTEM LOGIN AMAN (VIA SECRETS)
+# 2. SISTEM LOGIN & LOGOUT
 # ==============================================================================
 def logout():
     st.session_state['is_logged_in'] = False
@@ -53,17 +106,8 @@ if not st.session_state['is_logged_in']:
                 username_input = st.text_input("Username")
                 password_input = st.text_input("Password", type="password")
                 btn_login = st.form_submit_button("Masuk", type="primary", use_container_width=True)
-                
                 if btn_login:
-                    try:
-                        # Mengambil data login dari Streamlit Secrets
-                        ADMIN_USER = st.secrets["ADMIN_USER"]
-                        ADMIN_PASS = st.secrets["ADMIN_PASS"]
-                    except:
-                        st.error("⚠️ Kredensial Admin belum disetting di Streamlit Secrets!")
-                        st.stop()
-
-                    if username_input == ADMIN_USER and password_input == ADMIN_PASS:
+                    if username_input == "admin" and password_input == "admin123":
                         st.session_state['is_logged_in'] = True
                         st.success("Login Berhasil!")
                         time.sleep(0.5)
@@ -73,15 +117,28 @@ if not st.session_state['is_logged_in']:
     st.stop()
 
 # ==============================================================================
-# 3. DASHBOARD ADMIN
+# 3. DASHBOARD ADMIN (HEADER BARU)
 # ==============================================================================
-with st.sidebar:
-    st.write(f"👤 **Halo, Admin!**")
-    if st.button("🚪 Logout / Keluar", type="secondary", use_container_width=True):
+
+# Bagian Header Khusus Admin di atas layar
+c_head_kiri, c_head_kanan = st.columns([4, 1], vertical_alignment="center")
+with c_head_kiri:
+    st.markdown("<h2 style='margin-bottom: 0px; color: #00AAFF;'>👮 Panel Admin e-PAS Mart</h2>", unsafe_allow_html=True)
+    st.caption("👤 Halo, Admin! Selamat bertugas.")
+with c_head_kanan:
+    if st.button("🚪 Logout", type="secondary", use_container_width=True):
         logout()
-    st.markdown("---")
-    menu_admin = st.radio("Navigasi Menu", ["📋 Daftar Pesanan", "📦 Manajemen Menu"])
-    st.markdown("---")
+
+st.write("") # Jarak
+
+# Menu Navigasi Modern (Pill Style) yang ada di tengah
+menu_admin = st.radio(
+    "Navigasi Admin:", 
+    ["📋 Daftar Pesanan", "📦 Manajemen Menu"], 
+    horizontal=True,
+    label_visibility="collapsed"
+)
+st.divider()
 
 # --- FUNGSI BANTUAN ---
 def kompres_gambar(upload_file):
@@ -168,7 +225,7 @@ def buat_nota_pdf(p):
 # HALAMAN 1: MANAJEMEN MENU
 # ==============================================================================
 if menu_admin == "📦 Manajemen Menu":
-    st.title("📦 Manajemen Menu Kantin")
+    st.markdown("### 📦 Manajemen Menu Kantin")
     tab_edit, tab_tambah = st.tabs(["✏️ Edit Stok & Harga", "➕ Tambah Menu Baru"])
 
     with tab_edit:
@@ -255,14 +312,14 @@ if menu_admin == "📦 Manajemen Menu":
 # HALAMAN 2: DAFTAR PESANAN
 # ==============================================================================
 elif menu_admin == "📋 Daftar Pesanan":
-    st.title("📋 Verifikasi & Proses Pesanan")
+    st.markdown("### 📋 Verifikasi & Proses Pesanan")
     
     c_search, c_btn = st.columns([3, 1])
     with c_search:
         cari_resi = st.text_input("🔍 Cari Nomor Resi", placeholder="Ketik Resi Lengkap atau 4 Digit Terakhir...")
     with c_btn:
         st.write(""); st.write("") 
-        if st.button("🔄 Refresh Data"): st.rerun()
+        if st.button("🔄 Refresh Data", use_container_width=True): st.rerun()
 
     filter_data = None
     if cari_resi:
