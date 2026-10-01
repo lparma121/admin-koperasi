@@ -107,7 +107,7 @@ if not st.session_state['is_logged_in']:
                 password_input = st.text_input("Password", type="password")
                 btn_login = st.form_submit_button("Masuk", type="primary", use_container_width=True)
                 if btn_login:
-                    if username_input == "admin" and password_input == "admin123":
+                    if username_input == "admin" and password_input == "L7pasarma#":
                         st.session_state['is_logged_in'] = True
                         st.success("Login Berhasil!")
                         time.sleep(0.5)
