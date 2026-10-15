@@ -1,4 +1,3 @@
-
 import streamlit as st
 from supabase import create_client
 import time
@@ -189,6 +188,7 @@ def buat_nota_pdf(p):
     tgl = p.get('created_at', '-')[:10]
     pdf.cell(0, 5, f"Tanggal : {tgl}", ln=True)
     pdf.cell(0, 5, f"Pengirim : {p['nama_pemesan'][:20]}", ln=True)
+    pdf.cell(0, 5, f"No. WA   : {p.get('nomor_wa', '-')[:20]}", ln=True)
     pdf.cell(0, 5, f"Penerima : {p['untuk_siapa'][:20]}", ln=True)
     
     pdf.ln(2)
@@ -202,14 +202,12 @@ def buat_nota_pdf(p):
     items = p['item_pesanan'].replace('\n', ', ')
     pdf.multi_cell(0, 5, items)
     
-    # --- TOTAL BAYAR (UPDATE DISINI) ---
+    # --- TOTAL BAYAR ---
     pdf.ln(3)
     total_bayar = p.get('total_harga', 0)
     
-    # Kotak Total
-    pdf.set_fill_color(230, 230, 230) # Abu muda
+    pdf.set_fill_color(230, 230, 230)
     pdf.set_font("Arial", 'B', 11)
-    # Cell(width, height, text, border, ln, align, fill)
     pdf.cell(0, 8, f"TOTAL: {format_rupiah(total_bayar)}", 1, 1, 'R', True)
     
     pdf.ln(5)
@@ -336,7 +334,6 @@ elif menu_admin == "📋 Daftar Pesanan":
             return
 
         for p in p_list:
-            # Ambil Total Harga (Amankan jika null)
             total_duit = p.get('total_harga', 0)
             if total_duit is None: total_duit = 0
 
@@ -354,22 +351,19 @@ elif menu_admin == "📋 Daftar Pesanan":
 
                 with cols[1]:
                     st.write(f"**Pengirim:** {p['nama_pemesan']}")
+                    st.write(f"**No. WA:** {p.get('nomor_wa', '-')}")
                     st.write(f"**Penerima:** {p['untuk_siapa']}")
                     st.write(f"**Metode:** {p.get('cara_bayar', '-')}")
                     
                     st.code(f"Isi: {p['item_pesanan']}")
                     
-                    # --- UPDATE TAMPILAN HARGA ---
-                    # Menampilkan Total Harga + Kode Unik agar admin mudah cek
                     st.markdown(f"💰 **TOTAL TRANSFER:**")
                     st.markdown(f"### `{format_rupiah(total_duit)}`")
                     st.caption("*(Cocokkan angka ini dengan mutasi rekening)*")
-                    # -----------------------------
 
                     if "Ditolak" in p.get('status', ''): st.error(f"Status: {p['status']}")
 
                 with cols[2]:
-                    # Tombol Cetak Nota
                     if p['status'] in ["Pembayaran Valid (Diproses)", "Selesai"] or status_tab == "Proses":
                         pdf_data = buat_nota_pdf(p)
                         st.download_button("🖨️ CETAK NOTA (PDF)", pdf_data, f"Nota_{p['no_resi']}.pdf", "application/pdf", key=f"print_{p['id']}", type="secondary")
@@ -387,28 +381,31 @@ elif menu_admin == "📋 Daftar Pesanan":
                             
                             foto = None
                             if st_baru == "Selesai":
-                                st.caption("📷 Foto penyerahan barang:")
-                                foto = st.camera_input("Ambil Foto", key=f"c_{p['id']}")
+                                st.caption("📷 Upload Foto Penyerahan Barang (Max 5MB):")
+                                foto = st.file_uploader("Pilih file foto", type=['jpg', 'jpeg', 'png'], key=f"c_{p['id']}")
                             
                             btn_proses = st.form_submit_button("Simpan & Proses")
                             if btn_proses:
                                 u_data = {"status": st_baru}
                                 if st_baru == "Selesai":
                                     if foto:
-                                        f_name = f"serah_{p['no_resi'] if p.get('no_resi') else p['id']}"
-                                        url_foto = upload_ke_supabase(foto, "bukti_serah", f_name)
-                                        if url_foto:
-                                            u_data["foto_penerima"] = url_foto
-                                            supabase.table("pesanan").update(u_data).eq("id", p['id']).execute()
-                                            
-                                            no_hp = p.get('nomor_wa', '')
-                                            if no_hp and no_hp.startswith('0'): no_hp = '62' + no_hp[1:]
-                                            msg = f"Halo, Pesanan Resi {p.get('no_resi')} SUDAH DITERIMA oleh {p['untuk_siapa']}. Terima kasih."
-                                            link_wa = f"https://wa.me/{no_hp}?text={msg.replace(' ', '%20')}"
-                                            st.success("✅ Pesanan Selesai!")
-                                            st.link_button("📲 Kabari via WA", link_wa)
-                                        else: st.error("Gagal upload foto.")
-                                    else: st.error("⚠️ Foto penyerahan wajib diambil!")
+                                        if foto.size > 5 * 1024 * 1024:
+                                            st.error("⚠️ Ukuran file foto melebihi 5 MB! Harap upload file yang lebih kecil.")
+                                        else:
+                                            f_name = f"serah_{p['no_resi'] if p.get('no_resi') else p['id']}"
+                                            url_foto = upload_ke_supabase(foto, "bukti_serah", f_name)
+                                            if url_foto:
+                                                u_data["foto_penerima"] = url_foto
+                                                supabase.table("pesanan").update(u_data).eq("id", p['id']).execute()
+                                                
+                                                no_hp = p.get('nomor_wa', '')
+                                                if no_hp and no_hp.startswith('0'): no_hp = '62' + no_hp[1:]
+                                                msg = f"Halo, Pesanan Resi {p.get('no_resi')} SUDAH DITERIMA oleh {p['untuk_siapa']}. Terima kasih."
+                                                link_wa = f"https://wa.me/{no_hp}?text={msg.replace(' ', '%20')}"
+                                                st.success("✅ Pesanan Selesai!")
+                                                st.link_button("📲 Kabari via WA", link_wa)
+                                            else: st.error("Gagal upload foto.")
+                                    else: st.error("⚠️ Foto penyerahan wajib di-upload!")
                                 else:
                                     supabase.table("pesanan").update(u_data).eq("id", p['id']).execute()
                                     st.success(f"Status diubah: {st_baru}"); time.sleep(1); st.rerun()
@@ -423,7 +420,6 @@ elif menu_admin == "📋 Daftar Pesanan":
             if not res.data: st.info("✅ Tidak ada antrian pesanan baru.")
             else:
                 for p in res.data:
-                    # Ambil total harga
                     total_duit = p.get('total_harga', 0)
                     if total_duit is None: total_duit = 0
 
@@ -438,15 +434,14 @@ elif menu_admin == "📋 Daftar Pesanan":
                             else: st.error("❌ TIDAK ADA BUKTI")
                         with cols[1]:
                             st.write(f"**Pengirim:** {p['nama_pemesan']}")
+                            st.write(f"**No. WA:** {p.get('nomor_wa', '-')}")
                             st.write(f"**Penerima:** {p['untuk_siapa']}")
                             st.info(f"Metode: {p.get('cara_bayar', '-')}")
                             st.code(f"Isi: {p['item_pesanan']}")
 
-                            # --- UPDATE TAMPILAN HARGA DI PESANAN MASUK ---
                             st.markdown(f"💰 **TOTAL TRANSFER:**")
                             st.markdown(f"### `{format_rupiah(total_duit)}`")
                             st.caption("*(Termasuk Kode Unik)*")
-                            # ---------------------------------------------
 
                         with cols[2]:
                             st.write("---")
@@ -502,7 +497,6 @@ elif menu_admin == "📋 Daftar Pesanan":
                         with c1:
                             st.write(f"👤 **Pemilik:** {d['nama_pemesan']}")
                             
-                            # TAMPILKAN TOTAL DI VOUCHER JUGA
                             total_vou = d.get('total_harga', 0)
                             if total_vou is None: total_vou = 0
                             st.markdown(f"💰 **Nilai Voucher:** `{format_rupiah(total_vou)}`")
@@ -514,7 +508,7 @@ elif menu_admin == "📋 Daftar Pesanan":
                                         supabase.table("pesanan").update({"status": "Voucher Sudah Dipakai"}).eq("id", d['id']).execute()
                                         st.rerun()
                                 with c_tolak:
-                                    if st.button("🚫 HANGUSKAN", key=f"dny_{d['id']}", use_container_width=True):
+                                    if st.button("🚫 HANGUSKAN", key=f"dny_{d['id']}", use_keyword=True, use_container_width=True):
                                         supabase.table("pesanan").update({"status": "Voucher Ditolak / Hangus"}).eq("id", d['id']).execute()
                                         st.rerun()
                         with c2:
