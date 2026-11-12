@@ -5,6 +5,7 @@ from PIL import Image
 import io
 from fpdf import FPDF
 from datetime import datetime
+import pandas as pd
 
 # ==============================================================================
 # 1. KONFIGURASI & KONEKSI
@@ -130,10 +131,10 @@ with c_head_kanan:
 
 st.write("") # Jarak
 
-# Menu Navigasi Modern (Pill Style) yang ada di tengah
+# Menu Navigasi Modern (Pill Style) yang ada di tengah (Ditambahkan "📊 Rekap Transaksi")
 menu_admin = st.radio(
     "Navigasi Admin:", 
-    ["📋 Daftar Pesanan", "📦 Manajemen Menu"], 
+    ["📋 Daftar Pesanan", "📦 Manajemen Menu", "📊 Rekap Transaksi"], 
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -185,11 +186,11 @@ def buat_nota_pdf(p):
     pdf.ln(2)
     
     pdf.set_font("Arial", size=9)
-    tgl = p.get('created_at', '-')[:10]
+    tgl = str(p.get('created_at', '-'))[:10]
     pdf.cell(0, 5, f"Tanggal : {tgl}", ln=True)
-    pdf.cell(0, 5, f"Pengirim : {p['nama_pemesan'][:20]}", ln=True)
-    pdf.cell(0, 5, f"No. WA   : {p.get('nomor_wa', '-')[:20]}", ln=True)
-    pdf.cell(0, 5, f"Penerima : {p['untuk_siapa'][:20]}", ln=True)
+    pdf.cell(0, 5, f"Pengirim : {str(p.get('nama_pemesan', '-'))[:20]}", ln=True)
+    pdf.cell(0, 5, f"No. WA   : {str(p.get('nomor_wa', '-'))[:20]}", ln=True)
+    pdf.cell(0, 5, f"Penerima : {str(p.get('untuk_siapa', '-'))[:20]}", ln=True)
     
     pdf.ln(2)
     pdf.line(5, pdf.get_y(), 100, pdf.get_y())
@@ -199,7 +200,7 @@ def buat_nota_pdf(p):
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(0, 5, "DETAIL PESANAN:", ln=True)
     pdf.set_font("Arial", size=9)
-    items = p['item_pesanan'].replace('\n', ', ')
+    items = str(p.get('item_pesanan', '')).replace('\n', ', ')
     pdf.multi_cell(0, 5, items)
     
     # --- TOTAL BAYAR ---
@@ -519,3 +520,91 @@ elif menu_admin == "📋 Daftar Pesanan":
             st.header("🚫 Arsip Penolakan")
             res_tolak = supabase.table("pesanan").select("*").ilike("status", "%Ditolak Admin%").order("id", desc=True).limit(50).execute()
             render_pesanan(res_tolak.data, "Arsip")
+
+# ==============================================================================
+# HALAMAN 3: REKAP TRANSAKSI (FITUR BARU)
+# ==============================================================================
+elif menu_admin == "📊 Rekap Transaksi":
+    st.markdown("### 📊 Rekap Transaksi Sukses e-PAS Mart")
+    st.caption("Menampilkan seluruh daftar transaksi yang telah berstatus **Selesai** lengkap dengan informasi detail, bukti transfer, dan bukti serah terima.")
+
+    # Ambil data transaksi yang statusnya 'Selesai' dari Supabase
+    res_rekap = supabase.table("pesanan").select("*").eq("status", "Selesai").order("id", desc=True).execute()
+    data_selesai = res_rekap.data
+
+    if not data_selesai:
+        st.info("Belum ada data transaksi yang berstatus 'Selesai'.")
+    else:
+        # Tombol Cetak/Download Rekap Transaksi
+        st.write("---")
+        c_info, c_cetak = st.columns([2, 1])
+        with c_info:
+            st.write(f"Total Transaksi Sukses Tercatat: **{len(data_selesai)} pesanan**")
+        with c_cetak:
+            # Siapkan Data untuk diexport ke CSV (Cetak/Download Rekap)
+            df_rekap = pd.DataFrame(data_selesai)
+            # Pilih kolom yang relevan untuk laporan
+            kolom_laporan = {
+                'id': 'ID',
+                'no_resi': 'No Resi',
+                'created_at': 'Tanggal Pesan',
+                'nama_pemesan': 'Nama Pemesan',
+                'nomor_wa': 'No HP Pemesan',
+                'untuk_siapa': 'Nama Penerima (WBP)',
+                'item_pesanan': 'Barang Pesanan',
+                'total_harga': 'Total Harga (Rp)',
+                'cara_bayar': 'Metode Bayar',
+                'bukti_transfer': 'Link Bukti Transfer',
+                'foto_penerima': 'Link Bukti Serah Terima'
+            }
+            df_export = df_rekap[[k for k in kolom_laporan.keys() if k in df_rekap.columns]].rename(columns=kolom_laporan)
+            
+            csv_data = df_export.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Cetak / Download Rekap (CSV)",
+                data=csv_data,
+                file_name=f"Rekap_Transaksi_ePAS_Mart_{datetime.now().strftime('%Y-%m-%d')}.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True
+            )
+        st.write("---")
+
+        # Tampilkan Detail Per Transaksi
+        for idx, item in enumerate(data_selesai, 1):
+            with st.container(border=True):
+                st.markdown(f"#### 🏷️ Transaksi #{item.get('id')} — Resi: `{item.get('no_resi', '-')}`")
+                
+                # Baris Informasi Teks
+                col_info1, col_info2, col_info3 = st.columns(3)
+                with col_info1:
+                    st.markdown(f"**👤 Nama Pemesan:** {item.get('nama_pemesan', '-')}")
+                    st.markdown(f"**📞 No. HP / WA:** {item.get('nomor_wa', '-')}")
+                    st.markdown(f"**📅 Tanggal:** {str(item.get('created_at', '-'))[:16]}")
+                with col_info2:
+                    st.markdown(f"**🎯 Nama Penerima (WBP):** {item.get('untuk_siapa', '-')}")
+                    st.markdown(f"**💳 Metode Bayar:** {item.get('cara_bayar', '-')}")
+                    st.markdown(f"**💰 Total Transaksi:** `{format_rupiah(item.get('total_harga', 0))}`")
+                with col_info3:
+                    st.markdown(f"**📦 Barang Pesanan:**")
+                    st.code(item.get('item_pesanan', '-'))
+
+                st.write("")
+                
+                # Baris Penampil Gambar (Bukti Transfer & Bukti Serah Terima)
+                col_img1, col_img2 = st.columns(2)
+                with col_img1:
+                    st.markdown("**🧾 Bukti Transfer:**")
+                    if item.get('bukti_transfer'):
+                        st.image(item.get('bukti_transfer'), caption="Bukti Transfer Pengirim", width=250)
+                        st.link_button("🔍 Buka Gambar TF Full", item.get('bukti_transfer'))
+                    else:
+                        st.warning("Tidak ada bukti transfer yang diunggah.")
+                        
+                with col_img2:
+                    st.markdown("**🤝 Bukti Serah Terima:**")
+                    if item.get('foto_penerima'):
+                        st.image(item.get('foto_penerima'), caption="Foto Penyerahan ke WBP", width=250)
+                        st.link_button("🔍 Buka Foto Serah Terima Full", item.get('foto_penerima'))
+                    else:
+                        st.warning("Foto bukti serah terima belum tersedia.")
