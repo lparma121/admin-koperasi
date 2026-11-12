@@ -524,6 +524,9 @@ elif menu_admin == "📋 Daftar Pesanan":
 # ==============================================================================
 # HALAMAN 3: REKAP TRANSAKSI (FITUR BARU)
 # ==============================================================================
+# ==============================================================================
+# HALAMAN 3: REKAP TRANSAKSI (DENGAN FITUR CETAK PDF)
+# ==============================================================================
 elif menu_admin == "📊 Rekap Transaksi":
     st.markdown("### 📊 Rekap Transaksi Sukses e-PAS Mart")
     st.caption("Menampilkan seluruh daftar transaksi yang telah berstatus **Selesai** lengkap dengan informasi detail, bukti transfer, dan bukti serah terima.")
@@ -535,47 +538,90 @@ elif menu_admin == "📊 Rekap Transaksi":
     if not data_selesai:
         st.info("Belum ada data transaksi yang berstatus 'Selesai'.")
     else:
-        # Tombol Cetak/Download Rekap Transaksi
+        # Fungsi untuk membuat PDF Rekap Transaksi Keseluruhan
+        def buat_rekap_pdf(data_list):
+            pdf = FPDF(unit='mm', format='A4')
+            pdf.set_auto_page_break(auto=True, margin=10)
+            pdf.add_page()
+            
+            # Header Laporan
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(0, 8, "LAPORAN REKAP TRANSAKSI SUKSES", ln=True, align='C')
+            pdf.set_font("Arial", 'B', 11)
+            pdf.cell(0, 6, "e-PAS Mart - Lapas Kelas IIB Arga Makmur", ln=True, align='C')
+            pdf.set_font("Arial", '', 9)
+            pdf.cell(0, 5, f"Dicetak pada: {datetime.now().strftime('%d-%m-%Y %H:%M')} WIB", ln=True, align='C')
+            pdf.ln(5)
+            
+            # Tabel Header
+            pdf.set_font("Arial", 'B', 8)
+            pdf.set_fill_color(200, 220, 255)
+            pdf.cell(10, 7, "No", 1, 0, 'C', True)
+            pdf.cell(30, 7, "No. Resi", 1, 0, 'C', True)
+            pdf.cell(35, 7, "Pemesan", 1, 0, 'C', True)
+            pdf.cell(35, 7, "Penerima (WBP)", 1, 0, 'C', True)
+            pdf.cell(50, 7, "Item Pesanan", 1, 0, 'C', True)
+            pdf.cell(30, 7, "Total (Rp)", 1, 1, 'C', True)
+            
+            # Isi Tabel
+            pdf.set_font("Arial", '', 8)
+            for idx, item in enumerate(data_list, 1):
+                resi = str(item.get('no_resi', '-'))
+                pemesan = str(item.get('nama_pemesan', '-'))[:18]
+                penerima = str(item.get('untuk_siapa', '-'))[:18]
+                item_pesan = str(item.get('item_pesanan', '-'))[:28]
+                total = format_rupiah(item.get('total_harga', 0))
+                
+                pdf.cell(10, 6, str(idx), 1, 0, 'C')
+                pdf.cell(30, 6, resi, 1, 0, 'C')
+                pdf.cell(35, 6, pemesan, 1, 0, 'L')
+                pdf.cell(35, 6, penerima, 1, 0, 'L')
+                pdf.cell(50, 6, item_pesan, 1, 0, 'L')
+                pdf.cell(30, 6, total, 1, 1, 'R')
+                
+            return pdf.output(dest='S').encode('latin-1')
+
+        # Tombol Cetak/Download Rekap (CSV & PDF)
         st.write("---")
-        c_info, c_cetak = st.columns([2, 1])
+        c_info, c_csv, c_pdf = st.columns([1.5, 1, 1])
         with c_info:
             st.write(f"Total Transaksi Sukses Tercatat: **{len(data_selesai)} pesanan**")
-        with c_cetak:
-            # Siapkan Data untuk diexport ke CSV (Cetak/Download Rekap)
+        with c_csv:
             df_rekap = pd.DataFrame(data_selesai)
-            # Pilih kolom yang relevan untuk laporan
             kolom_laporan = {
-                'id': 'ID',
-                'no_resi': 'No Resi',
-                'created_at': 'Tanggal Pesan',
-                'nama_pemesan': 'Nama Pemesan',
-                'nomor_wa': 'No HP Pemesan',
-                'untuk_siapa': 'Nama Penerima (WBP)',
-                'item_pesanan': 'Barang Pesanan',
-                'total_harga': 'Total Harga (Rp)',
-                'cara_bayar': 'Metode Bayar',
-                'bukti_transfer': 'Link Bukti Transfer',
-                'foto_penerima': 'Link Bukti Serah Terima'
+                'id': 'ID', 'no_resi': 'No Resi', 'created_at': 'Tanggal Pesan',
+                'nama_pemesan': 'Nama Pemesan', 'nomor_wa': 'No HP Pemesan',
+                'untuk_siapa': 'Nama Penerima (WBP)', 'item_pesanan': 'Barang Pesanan',
+                'total_harga': 'Total Harga (Rp)', 'cara_bayar': 'Metode Bayar',
+                'bukti_transfer': 'Link Bukti Transfer', 'foto_penerima': 'Link Bukti Serah Terima'
             }
             df_export = df_rekap[[k for k in kolom_laporan.keys() if k in df_rekap.columns]].rename(columns=kolom_laporan)
-            
             csv_data = df_export.to_csv(index=False).encode('utf-8')
+            
             st.download_button(
-                label="📥 Cetak / Download Rekap (CSV)",
+                label="📥 Download CSV",
                 data=csv_data,
-                file_name=f"Rekap_Transaksi_ePAS_Mart_{datetime.now().strftime('%Y-%m-%d')}.csv",
+                file_name=f"Rekap_Transaksi_{datetime.now().strftime('%Y-%m-%d')}.csv",
                 mime="text/csv",
+                use_container_width=True
+            )
+        with c_pdf:
+            pdf_rekap_data = buat_rekap_pdf(data_selesai)
+            st.download_button(
+                label="🖨️ Cetak PDF",
+                data=pdf_rekap_data,
+                file_name=f"Rekap_Transaksi_{datetime.now().strftime('%Y-%m-%d')}.pdf",
+                mime="application/pdf",
                 type="primary",
                 use_container_width=True
             )
         st.write("---")
 
-        # Tampilkan Detail Per Transaksi
+        # Tampilkan Detail Per Transaksi di Panel Admin
         for idx, item in enumerate(data_selesai, 1):
             with st.container(border=True):
                 st.markdown(f"#### 🏷️ Transaksi #{item.get('id')} — Resi: `{item.get('no_resi', '-')}`")
                 
-                # Baris Informasi Teks
                 col_info1, col_info2, col_info3 = st.columns(3)
                 with col_info1:
                     st.markdown(f"**👤 Nama Pemesan:** {item.get('nama_pemesan', '-')}")
@@ -591,7 +637,6 @@ elif menu_admin == "📊 Rekap Transaksi":
 
                 st.write("")
                 
-                # Baris Penampil Gambar (Bukti Transfer & Bukti Serah Terima)
                 col_img1, col_img2 = st.columns(2)
                 with col_img1:
                     st.markdown("**🧾 Bukti Transfer:**")
